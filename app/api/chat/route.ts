@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import { HindsightClient } from '@vectorize-io/hindsight-client';
 
-const HINDSIGHT_API_URL =
-  process.env.HINDSIGHT_API_URL || 'https://api.hindsight.vectorize.io/v1/chat/completions';
-const HINDSIGHT_MODEL = process.env.HINDSIGHT_MODEL || 'gpt-4o-mini';
+const HINDSIGHT_BASE_URL =
+  process.env.HINDSIGHT_BASE_URL || 'https://api.hindsight.vectorize.io';
+const HINDSIGHT_BANK_ID = process.env.HINDSIGHT_BANK_ID || 'copify-assistant';
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 4_000;
 
@@ -48,37 +49,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const hindsightResponse = await fetch(HINDSIGHT_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: HINDSIGHT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are the helpful Copify assistant. Answer clearly and concisely. Copify transfers text between devices using short-lived codes. Do not claim to perform actions you cannot perform.',
-          },
-          ...messages,
-        ],
-        temperature: 0.4,
-      }),
+    const client = new HindsightClient({
+      baseUrl: HINDSIGHT_BASE_URL,
+      apiKey,
     });
+    const latestMessage = messages[messages.length - 1];
+    const conversation = messages
+      .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
+      .join('\n');
 
-    const responseBody = await hindsightResponse.json().catch(() => null);
-    if (!hindsightResponse.ok) {
-      console.error('Hindsight API request failed:', hindsightResponse.status, responseBody);
-      return NextResponse.json(
-        { error: 'CHAT_PROVIDER_ERROR', message: 'The assistant is temporarily unavailable.' },
-        { status: 502 }
-      );
+    try {
+      await client.retain(HINDSIGHT_BANK_ID, conversation);
+    } catch (error) {
+      const status = error instanceof Error ? error.message : error;
+      if (!String(status).includes('404')) throw error;
+      await client.createBank(HINDSIGHT_BANK_ID, { name: 'Copify Assistant' });
+      await client.retain(HINDSIGHT_BANK_ID, conversation);
     }
 
-    const content = responseBody?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || content.trim().length === 0) {
+    const response = await client.reflect(
+      HINDSIGHT_BANK_ID,
+      `You are the helpful Copify assistant. Answer clearly and concisely. Copify transfers text between devices using short-lived codes. Do not claim to perform actions you cannot perform.
+
+Based on the conversation history, respond to the user's latest message:
+${latestMessage.content}`
+    );
+
+    if (typeof response.text !== 'string' || response.text.trim().length === 0) {
       console.error('Hindsight API returned an invalid response');
       return NextResponse.json(
         { error: 'CHAT_INVALID_RESPONSE', message: 'The assistant returned an invalid response.' },
@@ -86,7 +83,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ content });
+    return NextResponse.json({ content: response.text });
   } catch (error) {
     console.error('Error handling chat request:', error);
     return NextResponse.json(
