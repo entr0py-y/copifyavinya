@@ -43,13 +43,13 @@ server. Copy the values into [`.env.local`](./.env.local):
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `HINDSIGHT_API_KEY`
-- `HINDSIGHT_API_URL` (optional; defaults to `https://api.hindsight.vectorize.io/v1/chat/completions`)
-- `HINDSIGHT_MODEL` (optional; defaults to `gpt-4o-mini`)
+- `HINDSIGHT_BASE_URL` (optional; defaults to `https://api.hindsight.vectorize.io`)
+- `HINDSIGHT_BANK_ID` (optional; defaults to `copify-assistant`)
 
 The Supabase migration in [`supabase/migration.sql`](./supabase/migration.sql) must
 also be applied to the project before creating transfers.
 
-The chat assistant uses Hindsight's OpenAI-compatible chat-completions API. Add
+The chat assistant uses Hindsight's memory and reflection API. Add
 `HINDSIGHT_API_KEY` only in `.env.local`; never prefix it with `NEXT_PUBLIC_`, because
 that would expose the key in the browser. Restart `npm run dev` after changing
 environment variables.
